@@ -19,6 +19,7 @@ include { KMCP_SEARCH                                   } from '../../modules/nf
 include { KMCP_PROFILE                                  } from '../../modules/nf-core/kmcp/profile/main'
 include { GANON_CLASSIFY                                } from '../../modules/nf-core/ganon/classify/main'
 include { GANON_REPORT                                  } from '../../modules/nf-core/ganon/report/main'
+include { FASTQ_ASSEMBLY_BIN_TAXONOMY                   } from '../../subworkflows/local/fastq_assembly_bin_taxonomy/main'
 
 
 // Custom Functions
@@ -96,6 +97,7 @@ workflow PROFILING {
             motus: db_meta.tool == 'motus'
             kmcp: db_meta.tool == 'kmcp'
             ganon: db_meta.tool == 'ganon'
+            gtdbtk: db_meta.tool == 'gtdbtk'
             unknown: true
         }
 
@@ -503,6 +505,24 @@ workflow PROFILING {
         // Might be flipped - check/define what is a profile vs raw classification
         ch_raw_profiles = ch_raw_profiles.mix(GANON_REPORT.out.tre)
         ch_raw_classifications = ch_raw_classifications.mix(GANON_CLASSIFY.out.all)
+    }
+
+    if (params.run_gtdbtk) {
+
+        ch_input_for_gtdbtkclassify = ch_input_for_profiling.gtdbtk
+            .filter { meta, reads, meta_db, db ->
+                if (meta.instrument_platform == 'OXFORD_NANOPORE') {
+                    log.warn("[nf-core/taxprofiler] GTDB-Tk has not been evaluated for Nanopore data. Skipping GTDB-Tk for sample ${meta.id}.")
+                }
+                meta_db.tool == 'gtdbtk' && meta.instrument_platform != 'OXFORD_NANOPORE'
+            }
+            .multiMap { it ->
+                reads: [it[0] + it[2], it[1]]
+                db: it[3]
+            }
+        ch_input_for_gtdbtkclassify.reads
+        FASTQ_ASSEMBLY_BIN_TAXONOMY(ch_input_for_gtdbtkclassify.reads, ch_input_for_gtdbtkclassify.db)
+        ch_versions = ch_versions.mix(FASTQ_ASSEMBLY_BIN_TAXONOMY.out.versions.first())
     }
 
     emit:
