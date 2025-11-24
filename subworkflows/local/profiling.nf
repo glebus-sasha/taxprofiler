@@ -523,6 +523,7 @@ workflow PROFILING {
         ch_input_for_gtdbtkclassify.reads
         FASTQ_ASSEMBLY_BIN_TAXONOMY(ch_input_for_gtdbtkclassify.reads, ch_input_for_gtdbtkclassify.db)
         ch_versions = ch_versions.mix(FASTQ_ASSEMBLY_BIN_TAXONOMY.out.versions.first())
+        ch_multiqc_files = ch_multiqc_files.mix(FASTQ_ASSEMBLY_BIN_TAXONOMY.out.multiqc)
     }
 
     emit:

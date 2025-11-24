@@ -6,6 +6,8 @@ include { METABAT2_JGISUMMARIZEBAMCONTIGDEPTHS } from '../../../modules/nf-core/
 include { METABAT2_METABAT2                    } from '../../../modules/nf-core/metabat/metabat'
 include { GTDBTK_CLASSIFYWF                    } from '../../../modules/nf-core/gtdbtk/classifywf'
 include { GTDBTK_GTDBTONCBIMAJORITYVOTE        } from '../../../modules/nf-core/gtdbtk/gtdbtoncbimajorityvote/main.nf'
+include { GTDBTK_SUMMARY                       } from '../../../modules/local/gtdbtk_summary/main.nf'
+include { GENOMAD_ENDTOEND                     } from '../../../modules/nf-core/genomad/endtoend/main.nf'
 
 
 workflow FASTQ_ASSEMBLY_BIN_TAXONOMY {
@@ -23,6 +25,7 @@ workflow FASTQ_ASSEMBLY_BIN_TAXONOMY {
     ch_metabat_input        = channel.empty()
     ch_reads_contigs_index  = channel.empty()
     ch_versions             = channel.empty()
+    ch_multiqc_reports      = channel.empty()
     //
     // Assembly with MEGAHIT
     //
@@ -91,6 +94,7 @@ workflow FASTQ_ASSEMBLY_BIN_TAXONOMY {
         false
     )
     ch_gtdbtk_outdir    = GTDBTK_CLASSIFYWF.out.gtdb_outdir
+    ch_multiqc_reports  = ch_multiqc_reports.mix(GTDBTK_CLASSIFYWF.out.summary)
     ch_versions         = ch_versions.mix(GTDBTK_CLASSIFYWF.out.versions)
     //
     // Converts the output classifications of GTDB-TK from GTDB taxonomy to NCBI taxonomy
@@ -104,8 +108,30 @@ workflow FASTQ_ASSEMBLY_BIN_TAXONOMY {
         bac120_metadata
     )
     ch_versions = ch_versions.mix(GTDBTK_GTDBTONCBIMAJORITYVOTE.out.versions)
+    //
+    // Generate GTDB-Tk summary
+    //
+    ch_summary_input = GTDBTK_CLASSIFYWF.out.summary.map { it -> it[1] }.collect().ifEmpty { ([]) }
+    GTDBTK_SUMMARY(
+        [],
+        ch_summary_input,
+        [],
+        [],
+    )
+    ch_versions = ch_versions.mix(GTDBTK_SUMMARY.out.versions)
+    //
+    // Generate GTDB-Tk summary
+    //
+    ch_summary_input = GTDBTK_CLASSIFYWF.out.summary.map { it -> it[1] }.collect().ifEmpty { ([]) }
+    ch_genomad_db = channel.value(file(params.genomad_db))
+    GENOMAD_ENDTOEND(
+        ch_contigs,
+        ch_genomad_db
+    )
+    ch_versions = ch_versions.mix(GENOMAD_ENDTOEND.out.versions)
 
     emit:
+    multiqc     = ch_multiqc_reports
     versions    = ch_versions
     contigs     = MEGAHIT.out.contigs
 }
